@@ -1,4 +1,4 @@
-
+#pragma pack(1)
     
 /*******************************************************************************
  * dnsdrdos.c - DNS distributed reflection DoS                                 *
