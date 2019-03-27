@@ -20,7 +20,7 @@
 
 /* Initialize global varible */
 char *spoof_address;
-char *spoof_ip;
+int spoof_ip;
 
 /* All the structure */
 typedef struct {
