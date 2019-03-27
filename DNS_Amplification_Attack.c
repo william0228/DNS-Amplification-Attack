@@ -274,6 +274,7 @@ int main(int argc, char **argv)
     unsigned int i = 0;
 
     printf("argv[1]: %s\n", argv[1]);
+    printf("argv[2]: %s\n", argv[2]);
 
     spoof_address = argv[1];
     spoof_ip = atoi(argv[2]);
