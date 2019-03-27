@@ -295,7 +295,7 @@ int main(int argc, char **argv)
     printf("%s\n", argv[1]);
 
     spoof_address = argv[1];
-    spoof_ip = argv[2];
+    spoof_ip = atoi(argv[2]);
 
     printf("%s\n", spoof_address);
 
