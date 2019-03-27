@@ -1,27 +1,4 @@
-#pragma pack(1)
-    
-/*******************************************************************************
- * dnsdrdos.c - DNS distributed reflection DoS                                 *
- *                                                                             *
- * DATE:                                                                       *
- * - xx/xx/2010                                                                *
- *                                                                             *
- * DESCRIPTION:                                                                *
- * - Proof of concept code for distributed DNS reflection DoS. All you need is *
- *   only a list of authorative nameservers. This technique is well-known and  *
- *   can be used against much more protocols.                                  *
- *                                                                             *
- * COMPILE:                                                                    *
- * - gcc -o dnsdrdos dnsdrdos.c -Wall -ansi                                    *
- *                                                                             *
- * NOTES:                                                                      *
- * - quick'n'dirty c0de                                                        *
- * - Only for testing purposes. I am not responsible for misusage.             *
- *                                                                             *
- * AUTHOR:                                                                     *
- * - noptrix (http://www.noptrix.net/ - http://www.majorsecurity.net)          *
- ******************************************************************************/
-
+#pragma pack(1) /*packet in line*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,7 +20,7 @@
 /* default settings */
 #define DEFAULT_SPOOF_ADDR  "127.0.0.1"
 #define DEFAULT_DOMAIN      "www.nctu.edu.tw"
-#define DEFAULT_DNS_PORT    53
+#define DEFAULT_DNS_PORT    7
 #define DEFAULT_LOOPS       10000
 
 
