@@ -19,7 +19,7 @@
 
 /* default settings */
 #define DEFAULT_SPOOF_ADDR  "127.0.0.1"
-#define DEFAULT_DOMAIN      "www.nctu.edu.tw."
+#define DEFAULT_DOMAIN      "www.nctu.edu.tw"
 #define DEFAULT_DNS_PORT    53
 #define DEFAULT_LOOPS       10000
 
@@ -358,7 +358,6 @@ void run_dnsdrdos(int c)
 
 /* free dnsdrdos \o/ */
 
-/* here we go */
 int main(int argc, char **argv)
 {
     int c = 0;
