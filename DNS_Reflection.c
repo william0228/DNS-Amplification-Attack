@@ -42,7 +42,7 @@
 
 /* default settings */
 #define DEFAULT_SPOOF_ADDR  "127.0.0.1"
-#define DEFAULT_DOMAIN      "google.com."
+#define DEFAULT_DOMAIN      "www.nctu.edu.tw"
 #define DEFAULT_DNS_PORT    53
 #define DEFAULT_LOOPS       10000
 
