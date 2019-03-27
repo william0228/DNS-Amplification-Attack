@@ -258,7 +258,7 @@ void Implement(int a)
 
     
     b = (bomb_t *) malloc(sizeof(bomb_t));
-    b = memset(b, 0x00, sizeof(bomb_t));
+    b = memset(b, 0, sizeof(bomb_t)); /*0x00*/
 
     b = Create_Rawsock(b);
     b = stfu_kernel(b);
