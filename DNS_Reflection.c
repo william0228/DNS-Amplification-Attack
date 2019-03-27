@@ -542,7 +542,7 @@ bomb_t *build_dns_request(bomb_t *bomb, job_t *job)
     bomb->query->qtype = htons(255);
     bomb->query->qclass = htons(1);
     bomb->opt = (dns_opt*)(bomb->packet + sizeof(struct iphdr) + 
-                           sizeof(struct udphdr) + sizeof(dnsheader_t) + (strlen(qname)) + sizeof(query_t));
+                           sizeof(struct udphdr) + sizeof(dnsheader_t) + (strlen(qname)) + sizeof(query_t) + 1);
     bomb->opt->name = 0;
     /*printf("%d\n",bomb->opt->type);*/
     bomb->opt->type  =htons(41) ;
