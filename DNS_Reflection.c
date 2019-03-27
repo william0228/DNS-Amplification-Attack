@@ -533,7 +533,7 @@ bomb_t *build_dns_request(bomb_t *bomb, job_t *job)
 
     qname = &bomb->packet[sizeof(struct iphdr) + sizeof(struct udphdr) + 
         sizeof(dnsheader_t)];
-    job->domain = "www.google.com.";
+    /*job->domain = "www.google.com.";*/
     dns_name_format(qname, job->domain);
 
     bomb->query = (query_t *) &bomb->packet[sizeof(struct iphdr) + 
